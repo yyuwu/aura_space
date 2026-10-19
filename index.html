@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuraSpace - 沉浸式音畫空間</title>
+    <script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=42Qp0x63ztbys5DrKvztuy2zSVRyz8nr41KicWyeX2xhdldvzrjNdP-pzCwX1a4cETySohTpYTKx6CNeVBpM31HlCqAz6LXvIx2h9x2_8QXN8xo1z_X_lbdBWGeZ5mHtT53pqjyTN1ScdtWCrrWV-7fXgIyhdGpI1IuSEu3KVkY50k9kev65azgluLHjxVEc9kgsa2qGuuiPnJFlgSWlHb2HG5Xw2StFe87xUXY9hEOwmCA09mRHV_M6iR_z_3DWc0ZnlbnaIXGrrWRzVr-us2fKPDfELccNPzylTtb42ONUkuk1t_uH2ElZwAz2gEHX" charset="UTF-8"></script><style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #020408;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none; 
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 24px;
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 12px 28px;
+            border-radius: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            transition: opacity 0.8s ease, transform 0.8s ease;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            z-index: 10;
+            align-items: center;
+        }
+        #ui.idle {
+            opacity: 0;
+            transform: translateX(-50%) translateY(20px);
+            pointer-events: none;
+        }
+        .btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            outline: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 14px;
+            border-radius: 20px;
+        }
+        .btn:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+        .btn:active {
+            transform: scale(0.95);
+        }
+        .icon-btn {
+            font-size: 22px;
+            padding: 6px;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+        }
+        
+        #toast {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.95);
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 10px 22px;
+            border-radius: 20px;
+            font-size: 15px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.4s;
+            letter-spacing: 1.5px;
+            z-index: 20;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        #toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="canvas"></canvas>
+    <div id="toast"></div>
+
+    <div id="ui">
+        <button class="btn" id="btn-visual">風格: Aurora</button>
+        <button class="btn" id="btn-audio">音效: drone</button>
+        <button class="btn icon-btn" id="btn-mute" title="靜音/播放">🔇</button>
+        <button class="btn icon-btn" id="btn-fullscreen" title="全螢幕">⛶</button>
+    </div>
+
+    <script>
+        try {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            let width, height;
+            let resizeTimeout;
+            
+            // 視覺與聽覺狀態
+            let visualMode = 0; // 0: Aurora, 1: Cyber, 2: Sunset, 3: Abyss
+            const visualNames = ['Aurora', 'Cyber', 'Sunset', 'Abyss'];
+            let time = 0;
+            
+            // 資料結構
+            let auroraWaves = [];
+            let cyberBeams = [];
+            let sunsetBlobs = [];
+            let abyssBubbles = [];
+            let stars = [];
+
+            const ui = document.getElementById('ui');
+            let idleTimer;
+            const toastEl = document.getElementById('toast');
+            let toastTimeout;
+
+            // 聲音狀態
+            let audioCtx;
+            let masterGain;
+            let isMuted = true;
+            let audioMode = 0; // 0: drone (合成), 1: campfire, 2: wind_chimes, 3: heavy_rain
+            const audioNames = ['drone', 'campfire', 'wind_chimes', 'heavy_rain'];
+            let isAudioInit = false;
+
+            // 實體音檔物件
+            const audioElements = {
+                1: new Audio('./campfire.mp3'),
+                2: new Audio('./wind_chimes.mp3'),
+                3: new Audio('./heavy_rain.mp3')
+            };
+            Object.values(audioElements).forEach(audio => {
+                audio.loop = true;
+            });
+            let audioSources = {};
+
+            function showToast(msg) {
+                toastEl.innerText = msg;
+                toastEl.classList.add('show');
+                clearTimeout(toastTimeout);
+                toastTimeout = setTimeout(() => {
+                    toastEl.classList.remove('show');
+                }, 2000);
+            }
+
+            function resetIdle() {
+                ui.classList.remove('idle');
+                document.body.style.cursor = 'default';
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(() => {
+                    ui.classList.add('idle');
+                    document.body.style.cursor = 'none';
+                }, 10000);
+            }
+
+            // === 初始化四大視覺物件 ===
+            function initAurora() {
+                stars = [];
+                for (let i = 0; i < 90; i++) {
+                    stars.push({
+                        x: Math.random() * width,
+                        y: Math.random() * height * 0.85,
+                        r: 0.6 + Math.random() * 1.6,
+                        baseAlpha: 0.15 + Math.random() * 0.55,
+                        twinkleSpeed: 0.01 + Math.random() * 0.03,
+                        phase: Math.random() * Math.PI * 2,
+                        driftSpeed: 0.08 + Math.random() * 0.15
+                    });
+                }
+            }
+
+            function initCyber() {
+                cyberBeams = [];
+                const palette = [
+                    { hue: 25,  sat: 100, light: 54 }, 
+                    { hue: 332, sat: 95,  light: 58 }, 
+                    { hue: 272, sat: 88,  light: 62 }, 
+                    { hue: 210, sat: 95,  light: 58 }  
+                ];
+                for (let i = 0; i < 26; i++) {
+                    const color = palette[Math.floor(Math.random() * palette.length)];
+                    const maxW = 35 + Math.random() * 75;
+                    cyberBeams.push({
+                        x: (Math.random() * 1.2 - 0.1) * width,
+                        vx: (Math.random() - 0.5) * 1.6,
+                        targetVx: (Math.random() - 0.5) * 1.6,
+                        minW: 2 + Math.random() * 5,
+                        maxW: maxW,
+                        pulseSpeed: 0.012 + Math.random() * 0.03,
+                        pulsePhase: Math.random() * Math.PI * 2,
+                        hue: color.hue,
+                        sat: color.sat,
+                        light: color.light,
+                        baseAlpha: 0.25 + Math.random() * 0.5,
+                        wanderTimer: Math.floor(Math.random() * 180) + 60
+                    });
+                }
+            }
+
+            function initSunset() {
+                sunsetBlobs = [];
+                const palette = [
+                    { hue: 14,  sat: 95,  light: 60 }, 
+                    { hue: 25,  sat: 90,  light: 62 }, 
+                    { hue: 42,  sat: 100, light: 65 }, 
+                    { hue: 8,   sat: 85,  light: 64 }, 
+                    { hue: 48,  sat: 95,  light: 70 }  
+                ];
+                for (let i = 0; i < 10; i++) {
+                    const color = palette[Math.floor(Math.random() * palette.length)];
+                    sunsetBlobs.push({
+                        x: Math.random() * width,
+                        y: Math.random() * height,
+                        vx: (Math.random() - 0.5) * 0.3,
+                        vy: (Math.random() - 0.5) * 0.3,
+                        baseR: 200 + Math.random() * 250,
+                        pulseSpeed: 0.0025 + Math.random() * 0.004,
+                        pulsePhase: Math.random() * Math.PI * 2,
+                        hue: color.hue,
+                        sat: color.sat,
+                        light: color.light,
+                        alpha: 0.32 + Math.random() * 0.18
+                    });
+                }
+            }
+
+            function initAbyss() {
+                abyssBubbles = [];
+                for (let i = 0; i < 45; i++) {
+                    abyssBubbles.push({
+                        x: Math.random() * width,
+                        y: Math.random() * height,
+                        r: 8 + Math.random() * 26,
+                        speed: 0.4 + Math.random() * 1.2,
+                        offset: Math.random() * Math.PI * 2,
+                        swaySpeed: 0.015 + Math.random() * 0.025,
+                        swayAmp: 15 + Math.random() * 25,
+                        baseAlpha: 0.25 + Math.random() * 0.45
+                    });
+                }
+            }
+
+            function resize() {
+                width = canvas.width = window.innerWidth || document.documentElement.clientWidth;
+                height = canvas.height = window.innerHeight || document.documentElement.clientHeight;
+                initAurora();
+                initCyber();
+                initSunset();
+                initAbyss();
+            }
+
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(resize, 300);
+            });
+            resize();
+
+            // === 渲染引擎 ===
+            const wavesConfig = [
+                { hue: 250, sat: 80, light: 62, yOffset: 0.36, amp: 55, speed: 0.006, freq: 0.0018, phase: 0, topAlpha: 0.38 },
+                { hue: 188, sat: 88, light: 56, yOffset: 0.45, amp: 65, speed: 0.009, freq: 0.0022, phase: 2, topAlpha: 0.42 },
+                { hue: 158, sat: 92, light: 54, yOffset: 0.54, amp: 50, speed: 0.012, freq: 0.0026, phase: 4, topAlpha: 0.46 },
+                { hue: 138, sat: 88, light: 60, yOffset: 0.63, amp: 45, speed: 0.015, freq: 0.0030, phase: 1.5, topAlpha: 0.50 }
+            ];
+
+            function draw() {
+                time += 1;
+
+                if (visualMode === 0) {
+                    // Aurora
+                    const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+                    bgGrad.addColorStop(0, '#020408');
+                    bgGrad.addColorStop(0.6, '#040d17');
+                    bgGrad.addColorStop(1, '#061520');
+                    ctx.fillStyle = bgGrad;
+                    ctx.fillRect(0, 0, width, height);
+
+                    stars.forEach(s => {
+                        s.y -= s.driftSpeed;
+                        if (s.y < 0) { s.y = height * 0.85; s.x = Math.random() * width; }
+                        const alpha = s.baseAlpha + Math.sin(time * s.twinkleSpeed + s.phase) * 0.25;
+                        ctx.fillStyle = `rgba(220, 245, 255, ${Math.max(0.05, Math.min(0.9, alpha))})`;
+                        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+                    });
+
+                    wavesConfig.forEach((w) => {
+                        const baseY = height * w.yOffset;
+                        const points = [];
+                        const step = 6;
+                        for (let x = 0; x <= width + step; x += step) {
+                            const t = time * w.speed + w.phase;
+                            const y = baseY + Math.sin(x * w.freq + t) * w.amp + Math.sin(x * w.freq * 2.1 - t * 0.7) * (w.amp * 0.35) + Math.cos(x * w.freq * 0.5 + t * 0.4) * (w.amp * 0.25);
+                            points.push({ x, y });
+                        }
+                        const currentHue = w.hue + Math.sin(time * 0.005 + w.phase) * 8;
+
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.moveTo(points[0].x, points[0].y);
+                        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+                        ctx.lineTo(width, height); ctx.lineTo(0, height); ctx.closePath();
+
+                        const fillGrad = ctx.createLinearGradient(0, baseY - w.amp, 0, height);
+                        fillGrad.addColorStop(0, `hsla(${currentHue}, ${w.sat}%, ${w.light}%, ${w.topAlpha})`);
+                        fillGrad.addColorStop(0.35, `hsla(${currentHue}, ${w.sat}%, ${w.light - 5}%, ${w.topAlpha * 0.45})`);
+                        fillGrad.addColorStop(0.75, `hsla(${currentHue}, ${w.sat}%, ${w.light - 12}%, ${w.topAlpha * 0.12})`);
+                        fillGrad.addColorStop(1, `hsla(${currentHue}, ${w.sat}%, ${w.light - 15}%, 0)`);
+
+                        ctx.fillStyle = fillGrad; ctx.fill(); ctx.restore();
+
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.moveTo(points[0].x, points[0].y);
+                        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+                        ctx.strokeStyle = `hsla(${currentHue}, ${w.sat}%, ${w.light + 22}%, 0.85)`;
+                        ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+                    });
+                }
+                else if (visualMode === 1) {
+                    // Cyber
+                    const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+                    bgGrad.addColorStop(0, '#07020c');
+                    bgGrad.addColorStop(0.55, '#12061c');
+                    bgGrad.addColorStop(1, '#1d0b26');
+                    ctx.fillStyle = bgGrad;
+                    ctx.fillRect(0, 0, width, height);
+
+                    ctx.globalCompositeOperation = 'lighter';
+                    cyberBeams.forEach((b, i) => {
+                        b.wanderTimer--;
+                        if (b.wanderTimer <= 0) {
+                            b.targetVx = (Math.random() - 0.5) * 2.2;
+                            b.wanderTimer = Math.floor(Math.random() * 200) + 80;
+                        }
+                        b.vx += (b.targetVx - b.vx) * 0.015;
+                        b.x += b.vx;
+
+                        const pulse = (Math.sin(time * b.pulseSpeed + b.pulsePhase) + 1) * 0.5;
+                        const currentW = b.minW + (b.maxW - b.minW) * pulse;
+                        const currentAlpha = b.baseAlpha * (0.35 + 0.65 * pulse);
+
+                        const margin = b.maxW * 2.5 + 80;
+                        if (b.x < -margin || b.x > width + margin) {
+                            cyberBeams[i] = {
+                                ...b,
+                                x: b.x < 0 ? width + margin : -margin
+                            };
+                        }
+
+                        const glowGrad = ctx.createLinearGradient(b.x - currentW, 0, b.x + currentW, 0);
+                        glowGrad.addColorStop(0, `hsla(${b.hue}, ${b.sat}%, ${b.light}%, 0)`);
+                        glowGrad.addColorStop(0.35, `hsla(${b.hue}, ${b.sat}%, ${b.light}%, ${currentAlpha * 0.35})`);
+                        glowGrad.addColorStop(0.5, `hsla(${b.hue}, ${b.sat}%, ${b.light + 15}%, ${currentAlpha})`);
+                        glowGrad.addColorStop(0.65, `hsla(${b.hue}, ${b.sat}%, ${b.light}%, ${currentAlpha * 0.35})`);
+                        glowGrad.addColorStop(1, `hsla(${b.hue}, ${b.sat}%, ${b.light}%, 0)`);
+
+                        ctx.fillStyle = glowGrad;
+                        ctx.fillRect(b.x - currentW, 0, currentW * 2, height);
+
+                        const coreW = Math.max(1, currentW * 0.08);
+                        ctx.fillStyle = `hsla(${b.hue}, 100%, 92%, ${Math.min(0.95, currentAlpha * 1.4)})`;
+                        ctx.fillRect(b.x - coreW * 0.5, 0, coreW, height);
+                    });
+                    ctx.globalCompositeOperation = 'source-over';
+                }
+                else if (visualMode === 2) {
+                    // Sunset (米白溫潤版)
+                    const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+                    bgGrad.addColorStop(0, '#fffdfa');
+                    bgGrad.addColorStop(0.5, '#f5f2ed');
+                    bgGrad.addColorStop(1, '#eee9e2');
+                    ctx.fillStyle = bgGrad;
+                    ctx.fillRect(0, 0, width, height);
+
+                    ctx.globalCompositeOperation = 'multiply';
+                    sunsetBlobs.forEach(b => {
+                        b.x += b.vx; b.y += b.vy;
+                        const margin = 250;
+                        if (b.x < -margin) b.vx = Math.abs(b.vx);
+                        if (b.x > width + margin) b.vx = -Math.abs(b.vx);
+                        if (b.y < -margin) b.vy = Math.abs(b.vy);
+                        if (b.y > height + margin) b.vy = -Math.abs(b.vy);
+
+                        const pulse = Math.sin(time * b.pulseSpeed + b.pulsePhase);
+                        const currentR = b.baseR * (0.75 + 0.35 * pulse);
+                        const currentAlpha = b.alpha * (0.7 + 0.3 * ((pulse + 1) * 0.5));
+
+                        const grad = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, currentR);
+                        grad.addColorStop(0, `hsla(${b.hue}, ${b.sat}%, ${b.light}%, ${currentAlpha})`);
+                        grad.addColorStop(0.5, `hsla(${b.hue}, ${b.sat}%, ${b.light + 4}%, ${currentAlpha * 0.7})`);
+                        grad.addColorStop(0.85, `hsla(${b.hue}, ${b.sat}%, ${b.light + 8}%, ${currentAlpha * 0.25})`);
+                        grad.addColorStop(1, `hsla(${b.hue}, ${b.sat}%, ${b.light}%, 0)`);
+
+                        ctx.fillStyle = grad;
+                        ctx.beginPath(); ctx.arc(b.x, b.y, currentR, 0, Math.PI * 2); ctx.fill();
+                    });
+                    ctx.globalCompositeOperation = 'source-over';
+                }
+                else if (visualMode === 3) {
+                    // Abyss (米白背景空心泡泡)
+                    const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+                    bgGrad.addColorStop(0, '#fffdfa');
+                    bgGrad.addColorStop(0.5, '#f5f2ed');
+                    bgGrad.addColorStop(1, '#eee9e2');
+                    ctx.fillStyle = bgGrad;
+                    ctx.fillRect(0, 0, width, height);
+
+                    abyssBubbles.forEach((b, i) => {
+                        b.y -= b.speed;
+                        const x = b.x + Math.sin(time * b.swaySpeed + b.offset) * b.swayAmp;
+
+                        let alphaFactor = 1;
+                        if (b.y > height - 100) alphaFactor = (height - b.y) / 100;
+                        else if (b.y < 120) alphaFactor = b.y / 120;
+                        const currentAlpha = Math.max(0, Math.min(1, b.baseAlpha * alphaFactor));
+
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.arc(x, b.y, b.r, 0, Math.PI * 2);
+                        ctx.strokeStyle = `rgba(60, 90, 120, ${currentAlpha * 0.6})`;
+                        ctx.lineWidth = 1.5; ctx.stroke();
+
+                        ctx.beginPath();
+                        ctx.arc(x, b.y, b.r * 0.85, 0, Math.PI * 2);
+                        ctx.strokeStyle = `rgba(120, 160, 200, ${currentAlpha * 0.3})`;
+                        ctx.lineWidth = 0.75; ctx.stroke();
+
+                        ctx.beginPath();
+                        ctx.arc(x - b.r * 0.35, b.y - b.r * 0.35, Math.max(1, b.r * 0.18), 0, Math.PI * 2);
+                        ctx.fillStyle = `rgba(255, 255, 255, ${currentAlpha * 0.8})`;
+                        ctx.fill();
+                        ctx.restore();
+
+                        if (b.y + b.r < 0) {
+                            abyssBubbles[i] = {
+                                x: Math.random() * width,
+                                y: height + 50,
+                                r: 8 + Math.random() * 26,
+                                speed: 0.4 + Math.random() * 1.2,
+                                offset: Math.random() * Math.PI * 2,
+                                swaySpeed: 0.015 + Math.random() * 0.025,
+                                swayAmp: 15 + Math.random() * 25,
+                                baseAlpha: 0.25 + Math.random() * 0.45
+                            };
+                        }
+                    });
+                }
+
+                requestAnimationFrame(draw);
+            }
+            requestAnimationFrame(draw);
+
+            // === 聽覺引擎 (音量調小、回歸第一版音頻頻率與起伏) ===
+            let droneNodeContainer = null;
+
+            function initAudioEngine() {
+                if (isAudioInit) return;
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioCtx = new AudioContext();
+                    masterGain = audioCtx.createGain();
+                    masterGain.gain.value = 0;
+                    masterGain.connect(audioCtx.destination);
+
+                    // Track 0: drone (回歸第一版的音頻頻率與速度，音量調小)
+                    const droneGain = audioCtx.createGain();
+                    droneGain.gain.value = 0.35; // 將合成音基礎音量調小
+                    
+                    // 回歸第一版的頻率 (100Hz, 102.5Hz, 149Hz)
+                    [100, 102.5, 149].forEach(f => {
+                        let osc = audioCtx.createOscillator();
+                        osc.type = 'sine';
+                        osc.frequency.value = f;
+                        osc.connect(droneGain);
+                        osc.start();
+                    });
+
+                    // 回歸第一版的呼吸 LFO 頻率 (0.05)
+                    let lfo = audioCtx.createOscillator();
+                    lfo.frequency.value = 0.05; 
+                    let lfoGain = audioCtx.createGain();
+                    lfoGain.gain.value = 0.3;
+                    lfo.connect(lfoGain).connect(droneGain.gain);
+                    lfo.start();
+
+                    droneGain.connect(masterGain);
+                    audioSources[0] = { gain: droneGain, type: 'synth' };
+
+                    // Track 1, 2, 3: 實體音檔 (campfire, wind_chimes, heavy_rain)
+                    const audioMap = { 1: audioElements[1], 2: audioElements[2], 3: audioElements[3] };
+                    Object.keys(audioMap).forEach(key => {
+                        const audioElement = audioMap[key];
+                        const trackGain = audioCtx.createGain();
+                        trackGain.gain.value = 0;
+                        const sourceNode = audioCtx.createMediaElementSource(audioElement);
+                        sourceNode.connect(trackGain).connect(masterGain);
+                        audioSources[key] = { gain: trackGain, type: 'audio', element: audioElement };
+                    });
+
+                    isAudioInit = true;
+                    updateAudioState();
+                } catch (e) {
+                    console.log("Audio Init Error:", e);
+                }
+            }
+
+            function updateAudioState() {
+                if (!isAudioInit) return;
+
+                masterGain.gain.setTargetAtTime(isMuted ? 0 : 1, audioCtx.currentTime, 0.5);
+
+                Object.keys(audioSources).forEach(key => {
+                    const k = parseInt(key);
+                    const source = audioSources[k];
+                    const targetGain = (k === audioMode && !isMuted) ? 1 : 0;
+                    source.gain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.8);
+
+                    if (source.type === 'audio') {
+                        if (k === audioMode && !isMuted) {
+                            source.element.play().catch(err => console.log("Play waiting for user action"));
+                        } else {
+                            source.element.pause();
+                        }
+                    }
+                });
+            }
+
+            // === UI 事件綁定 ===
+            window.addEventListener('mousemove', resetIdle);
+            window.addEventListener('touchstart', resetIdle, {passive: true});
+            window.addEventListener('click', resetIdle);
+
+            // 風格按鈕
+            const btnVisual = document.getElementById('btn-visual');
+            btnVisual.addEventListener('click', () => {
+                visualMode = (visualMode + 1) % 4;
+                btnVisual.innerText = '風格: ' + visualNames[visualMode];
+                showToast('風格：' + visualNames[visualMode]);
+            });
+
+            // 音效按鈕
+            const btnAudio = document.getElementById('btn-audio');
+            btnAudio.addEventListener('click', () => {
+                initAudioEngine();
+                if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+                audioMode = (audioMode + 1) % 4;
+                btnAudio.innerText = '音效: ' + audioNames[audioMode];
+                
+                if (isMuted) {
+                    isMuted = false;
+                    document.getElementById('btn-mute').innerText = '🔊';
+                }
+                updateAudioState();
+                showToast('音效：' + audioNames[audioMode]);
+
+                if (audioMode > 0) {
+                    const targetAudio = audioElements[audioMode];
+                    targetAudio.onerror = () => {
+                        showToast('⚠️ 找不到音檔：' + audioNames[audioMode] + '.mp3');
+                    };
+                }
+            });
+
+            // 靜音開關
+            const btnMute = document.getElementById('btn-mute');
+            btnMute.addEventListener('click', () => {
+                initAudioEngine();
+                if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+                isMuted = !isMuted;
+                btnMute.innerText = isMuted ? '🔇' : '🔊';
+                updateAudioState();
+                showToast(isMuted ? '音效已靜音' : '音效已開啟');
+            });
+
+            // 全螢幕按鈕
+            document.getElementById('btn-fullscreen').addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        showToast('瀏覽器不支援全螢幕');
+                    });
+                    showToast('進入全螢幕');
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                        showToast('退出全螢幕');
+                    }
+                }
+            });
+
+            resetIdle();
+
+        } catch (fatalError) {
+            console.error("Fatal error:", fatalError);
+            alert("初始化發生錯誤：" + fatalError.message);
+        }
+    </script>
+</body>
+</html>
