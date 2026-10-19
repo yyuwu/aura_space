@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AuraSpace - 沉浸式音畫空間</title>
-    <script type="text/javascript" src="https://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=42Qp0x63ztbys5DrKvztuy2zSVRyz8nr41KicWyeX2xhdldvzrjNdP-pzCwX1a4cETySohTpYTKx6CNeVBpM31HlCqAz6LXvIx2h9x2_8QXN8xo1z_X_lbdBWGeZ5mHtT53pqjyTN1ScdtWCrrWV-7fXgIyhdGpI1IuSEu3KVkY50k9kev65azgluLHjxVEc9kgsa2qGuuiPnJFlgSWlHb2HG5Xw2StFe87xUXY9hEOwmCA09mRHV_M6iR_z_3DWc0ZnlbnaIXGrrWRzVr-us2fKPDfELccNPzylTtb42ONUkuk1t_uH2ElZwAz2gEHX" charset="UTF-8"></script><style>
+    <style>
         body, html {
             margin: 0;
             padding: 0;
@@ -120,12 +120,10 @@
             let width, height;
             let resizeTimeout;
             
-            // 視覺與聽覺狀態
-            let visualMode = 0; // 0: Aurora, 1: Cyber, 2: Sunset, 3: Abyss
+            let visualMode = 0; 
             const visualNames = ['Aurora', 'Cyber', 'Sunset', 'Abyss'];
             let time = 0;
             
-            // 資料結構
             let auroraWaves = [];
             let cyberBeams = [];
             let sunsetBlobs = [];
@@ -137,19 +135,18 @@
             const toastEl = document.getElementById('toast');
             let toastTimeout;
 
-            // 聲音狀態
             let audioCtx;
             let masterGain;
             let isMuted = true;
-            let audioMode = 0; // 0: drone (合成), 1: campfire, 2: wind_chimes, 3: heavy_rain
+            let audioMode = 0; 
             const audioNames = ['drone', 'campfire', 'wind_chimes', 'heavy_rain'];
             let isAudioInit = false;
 
-            // 實體音檔物件
+            // 實體音檔物件 (已更新為 assets/ 資料夾路徑)
             const audioElements = {
-                1: new Audio('./campfire.mp3'),
-                2: new Audio('./wind_chimes.mp3'),
-                3: new Audio('./heavy_rain.mp3')
+                1: new Audio('./assets/campfire.mp3'),
+                2: new Audio('./assets/wind_chimes.mp3'),
+                3: new Audio('./assets/heavy_rain.mp3')
             };
             Object.values(audioElements).forEach(audio => {
                 audio.loop = true;
@@ -175,7 +172,6 @@
                 }, 10000);
             }
 
-            // === 初始化四大視覺物件 ===
             function initAurora() {
                 stars = [];
                 for (let i = 0; i < 90; i++) {
@@ -277,7 +273,6 @@
             });
             resize();
 
-            // === 渲染引擎 ===
             const wavesConfig = [
                 { hue: 250, sat: 80, light: 62, yOffset: 0.36, amp: 55, speed: 0.006, freq: 0.0018, phase: 0, topAlpha: 0.38 },
                 { hue: 188, sat: 88, light: 56, yOffset: 0.45, amp: 65, speed: 0.009, freq: 0.0022, phase: 2, topAlpha: 0.42 },
@@ -289,7 +284,6 @@
                 time += 1;
 
                 if (visualMode === 0) {
-                    // Aurora
                     const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
                     bgGrad.addColorStop(0, '#020408');
                     bgGrad.addColorStop(0.6, '#040d17');
@@ -339,7 +333,6 @@
                     });
                 }
                 else if (visualMode === 1) {
-                    // Cyber
                     const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
                     bgGrad.addColorStop(0, '#07020c');
                     bgGrad.addColorStop(0.55, '#12061c');
@@ -386,7 +379,6 @@
                     ctx.globalCompositeOperation = 'source-over';
                 }
                 else if (visualMode === 2) {
-                    // Sunset (米白溫潤版)
                     const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
                     bgGrad.addColorStop(0, '#fffdfa');
                     bgGrad.addColorStop(0.5, '#f5f2ed');
@@ -419,7 +411,6 @@
                     ctx.globalCompositeOperation = 'source-over';
                 }
                 else if (visualMode === 3) {
-                    // Abyss (米白背景空心泡泡)
                     const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
                     bgGrad.addColorStop(0, '#fffdfa');
                     bgGrad.addColorStop(0.5, '#f5f2ed');
@@ -472,9 +463,6 @@
             }
             requestAnimationFrame(draw);
 
-            // === 聽覺引擎 (音量調小、回歸第一版音頻頻率與起伏) ===
-            let droneNodeContainer = null;
-
             function initAudioEngine() {
                 if (isAudioInit) return;
                 try {
@@ -484,11 +472,9 @@
                     masterGain.gain.value = 0;
                     masterGain.connect(audioCtx.destination);
 
-                    // Track 0: drone (回歸第一版的音頻頻率與速度，音量調小)
                     const droneGain = audioCtx.createGain();
-                    droneGain.gain.value = 0.35; // 將合成音基礎音量調小
+                    droneGain.gain.value = 0.35;
                     
-                    // 回歸第一版的頻率 (100Hz, 102.5Hz, 149Hz)
                     [100, 102.5, 149].forEach(f => {
                         let osc = audioCtx.createOscillator();
                         osc.type = 'sine';
@@ -497,7 +483,6 @@
                         osc.start();
                     });
 
-                    // 回歸第一版的呼吸 LFO 頻率 (0.05)
                     let lfo = audioCtx.createOscillator();
                     lfo.frequency.value = 0.05; 
                     let lfoGain = audioCtx.createGain();
@@ -508,7 +493,6 @@
                     droneGain.connect(masterGain);
                     audioSources[0] = { gain: droneGain, type: 'synth' };
 
-                    // Track 1, 2, 3: 實體音檔 (campfire, wind_chimes, heavy_rain)
                     const audioMap = { 1: audioElements[1], 2: audioElements[2], 3: audioElements[3] };
                     Object.keys(audioMap).forEach(key => {
                         const audioElement = audioMap[key];
@@ -547,12 +531,10 @@
                 });
             }
 
-            // === UI 事件綁定 ===
             window.addEventListener('mousemove', resetIdle);
             window.addEventListener('touchstart', resetIdle, {passive: true});
             window.addEventListener('click', resetIdle);
 
-            // 風格按鈕
             const btnVisual = document.getElementById('btn-visual');
             btnVisual.addEventListener('click', () => {
                 visualMode = (visualMode + 1) % 4;
@@ -560,7 +542,6 @@
                 showToast('風格：' + visualNames[visualMode]);
             });
 
-            // 音效按鈕
             const btnAudio = document.getElementById('btn-audio');
             btnAudio.addEventListener('click', () => {
                 initAudioEngine();
@@ -579,12 +560,11 @@
                 if (audioMode > 0) {
                     const targetAudio = audioElements[audioMode];
                     targetAudio.onerror = () => {
-                        showToast('⚠️ 找不到音檔：' + audioNames[audioMode] + '.mp3');
+                        showToast('⚠️ 找不到音檔：assets/' + audioNames[audioMode] + '.mp3');
                     };
                 }
             });
 
-            // 靜音開關
             const btnMute = document.getElementById('btn-mute');
             btnMute.addEventListener('click', () => {
                 initAudioEngine();
@@ -596,7 +576,6 @@
                 showToast(isMuted ? '音效已靜音' : '音效已開啟');
             });
 
-            // 全螢幕按鈕
             document.getElementById('btn-fullscreen').addEventListener('click', () => {
                 if (!document.fullscreenElement) {
                     document.documentElement.requestFullscreen().catch(err => {
